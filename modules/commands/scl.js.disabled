@@ -1,0 +1,414 @@
+// scl.js — lệnh !scl (SoundCloud) — 1 file, Node 18+ ESM
+import fs from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+// Chỉnh lại import theo project của bạn:
+import { say, UserError } from './result.js';
+import * as style from './style.js';
+
+const execFileAsync = promisify(execFile);
+
+// ================= CONFIG =================
+export const PREFIX = '!';
+export const COMMAND = 'scl';
+const BOT_DIR = process.env.BOT_DIR || '/home/huy/Downloads/bot';
+const CARD_SCRIPT = path.join(BOT_DIR, 'scripts', 'render-scl2-card.mjs');
+const DATA_DIR = 'data';
+const MAX_AUDIO = 35 << 20;
+const SELECTION_TTL = 3 * 60_000;
+const SEARCH_TTL = 60_000;
+const HLS_CONCURRENCY = 6;
+const UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+const API = 'https://api-v2.soundcloud.com';
+
+// ================= HELPERS =================
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fmtDur = (ms) => {
+  const s = Math.floor((ms || 0) / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+/** Gộp các lời gọi đồng thời cùng key vào 1 promise */
+const inflight = new Map();
+function dedupe(key, fn) {
+  if (inflight.has(key)) return inflight.get(key);
+  const p = Promise.resolve().then(fn).finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+// ================= SOUNDCLOUD CLIENT =================
+const CID_FILE = path.join(DATA_DIR, 'sc_client_id.txt');
+let clientId = null;
+
+async function getClientId(force = false, signal) {
+  if (clientId && !force) return clientId;
+  if (!force) {
+    try {
+      clientId = (await fs.readFile(CID_FILE, 'utf8')).trim() || null;
+      if (clientId) return clientId;
+    } catch { /* chưa có */ }
+  }
+  return dedupe('cid', async () => {
+    const html = await (await fetch('https://soundcloud.com/', { headers: { 'User-Agent': UA }, signal })).text();
+    const scripts = [...html.matchAll(/<script[^>]+src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"]+\.js)"/g)]
+      .map((m) => m[1])
+      .reverse();
+    for (const src of scripts) {
+      try {
+        const js = await (await fetch(src, { headers: { 'User-Agent': UA }, signal })).text();
+        const m = js.match(/[,{]client_id:"([a-zA-Z0-9]{32})"/);
+        if (m) {
+          clientId = m[1];
+          fs.mkdir(DATA_DIR, { recursive: true }).then(() => fs.writeFile(CID_FILE, clientId)).catch(() => {});
+          return clientId;
+        }
+      } catch { /* thử script tiếp */ }
+    }
+    throw new Error('không lấy được client_id SoundCloud');
+  });
+}
+
+/** GET + tự refresh client_id (401/403) + retry (429/5xx) */
+async function scGet(url, params = {}, signal) {
+  let err;
+  for (let i = 0; i < 3; i++) {
+    const u = new URL(url);
+    for (const [k, v] of Object.entries(params)) if (v != null) u.searchParams.set(k, v);
+    u.searchParams.set('client_id', await getClientId(false, signal));
+    const res = await fetch(u, { headers: { 'User-Agent': UA }, signal });
+    if (res.ok) return res.json();
+    err = new Error(`SoundCloud HTTP ${res.status}`);
+    if (res.status === 401 || res.status === 403) await getClientId(true, signal);
+    else if (res.status === 429 || res.status >= 500) await sleep(400 * (i + 1));
+    else break;
+  }
+  throw err;
+}
+
+const searchCache = new Map(); // query -> {at, tracks}
+async function searchTracks(query, limit, signal) {
+  const key = query.toLowerCase();
+  const hit = searchCache.get(key);
+  if (hit && Date.now() - hit.at < SEARCH_TTL) return hit.tracks;
+  const data = await scGet(`${API}/search/tracks`, { q: query, limit: limit + 5 }, signal);
+  const tracks = (data.collection || []).filter((t) => t?.id).slice(0, limit);
+  searchCache.set(key, { at: Date.now(), tracks });
+  return tracks;
+}
+
+async function resolveStream(track, signal) {
+  if (track.policy === 'SNIP' || track.policy === 'BLOCK') {
+    throw new Error('bài này chỉ có preview / bị chặn tại khu vực');
+  }
+  // Search đôi khi thiếu transcodings → hydrate
+  if (!track.media?.transcodings?.length || !track.track_authorization) {
+    const arr = await scGet(`${API}/tracks`, { ids: track.id }, signal);
+    if (arr?.[0]) track = { ...track, ...arr[0] };
+  }
+  const score = (t) =>
+    (t.format?.protocol === 'progressive' ? 2 : 0) + (/audio\/mpeg/.test(t.format?.mime_type || '') ? 1 : 0);
+  const tc = (track.media?.transcodings || [])
+    .filter((t) => !t.snipped && !/\/preview\//.test(t.url))
+    .sort((a, b) => score(b) - score(a))[0];
+  if (!tc) throw new Error('không có định dạng phát được');
+
+  const data = await scGet(tc.url, { track_authorization: track.track_authorization }, signal);
+  if (!data?.url) throw new Error('không nhận được stream url');
+  return { url: data.url, protocol: tc.format?.protocol || 'progressive' };
+}
+
+async function fetchBuf(url, signal) {
+  for (let i = 0; i < 3; i++) {
+    const r = await fetch(url, { headers: { 'User-Agent': UA }, signal });
+    if (r.ok) return Buffer.from(await r.arrayBuffer());
+    if (i === 2) throw new Error(`segment lỗi HTTP ${r.status}`);
+    await sleep(300 * (i + 1));
+  }
+}
+
+/** Tải thẳng xuống file (stream, không giữ cả file trong RAM). Vượt giới hạn → lỗi + xoá file. */
+async function downloadToFile({ url, protocol }, file, maxBytes, signal) {
+  const out = createWriteStream(file, { mode: 0o600 });
+  let size = 0;
+  const write = (buf) =>
+    new Promise((res, rej) => {
+      size += buf.length;
+      if (size > maxBytes) return rej(new Error(`file vượt giới hạn ${Math.round(maxBytes / 1048576)}MB`));
+      out.write(buf, (e) => (e ? rej(e) : res()));
+    });
+
+  try {
+    if (protocol === 'progressive') {
+      const res = await fetch(url, { headers: { 'User-Agent': UA }, signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (Number(res.headers.get('content-length')) > maxBytes) throw new Error('file vượt giới hạn dung lượng');
+      for await (const chunk of res.body) await write(chunk);
+    } else {
+      const m3u8 = await (await fetch(url, { headers: { 'User-Agent': UA }, signal })).text();
+      const urls = [];
+      for (const line of m3u8.split('\n').map((l) => l.trim())) {
+        const map = line.startsWith('#EXT-X-MAP:') && line.match(/URI="([^"]+)"/);
+        if (map) urls.push(new URL(map[1], url).href);
+        else if (line && !line.startsWith('#')) urls.push(new URL(line, url).href);
+      }
+      if (!urls.length) throw new Error('playlist HLS rỗng');
+      // tải song song theo lô, ghi tuần tự để giữ đúng thứ tự
+      for (let i = 0; i < urls.length; i += HLS_CONCURRENCY) {
+        const bufs = await Promise.all(urls.slice(i, i + HLS_CONCURRENCY).map((u) => fetchBuf(u, signal)));
+        for (const b of bufs) await write(b);
+      }
+    }
+    await new Promise((res, rej) => out.end((e) => (e ? rej(e) : res())));
+  } catch (e) {
+    out.destroy();
+    await fs.rm(file, { force: true });
+    throw e;
+  }
+}
+
+// ================= LINK CACHE (voice đã upload Zalo) =================
+const LINK_FILE = path.join(DATA_DIR, 'sc_links.json');
+let links = null;
+async function loadLinks() {
+  if (links) return links;
+  try {
+    links = new Map(Object.entries(JSON.parse(await fs.readFile(LINK_FILE, 'utf8'))));
+  } catch {
+    links = new Map();
+  }
+  return links;
+}
+let saving = Promise.resolve();
+function saveLinks() {
+  saving = saving.then(async () => {
+    const tmp = `${LINK_FILE}.tmp`;
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(tmp, JSON.stringify(Object.fromEntries(links)));
+    await fs.rename(tmp, LINK_FILE);
+  }).catch(() => {});
+  return saving;
+}
+const linkGet = async (id) => (await loadLinks()).get(String(id));
+const linkSet = async (id, v) => ((await loadLinks()).set(String(id), v), saveLinks());
+const linkDel = async (id) => ((await loadLinks()).delete(String(id)), saveLinks());
+
+// ================= CARD =================
+function renderCard(track) {
+  const name = `sclcard_${track.id}.jpg`;
+  const file = path.resolve(DATA_DIR, 'media', name);
+  return dedupe(`card:${track.id}`, async () => {
+    try {
+      if ((await fs.stat(file)).size > 1000) return name;
+    } catch { /* chưa có */ }
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const tmp = `${file}.${process.pid}.${Date.now()}.tmp.jpg`;
+    const json = JSON.stringify({
+      title: track.title,
+      artist: track.user?.username,
+      artwork_url: track.artwork_url,
+      duration: track.duration,
+      playback_count: track.playback_count,
+      likes_count: track.likes_count,
+      comment_count: track.comment_count,
+    });
+    try {
+      await execFileAsync('node', [CARD_SCRIPT, json, tmp], { cwd: BOT_DIR, timeout: 30_000 });
+      await fs.rename(tmp, file); // atomic: không bao giờ gửi card ghi dở
+    } catch (e) {
+      await fs.rm(tmp, { force: true });
+      throw new Error(`render card lỗi: ${e.message}`);
+    }
+    return name;
+  });
+}
+
+// ================= PLAY =================
+function getAudio(signal, c, track) {
+  return dedupe(`audio:${track.id}`, async () => {
+    const cached = await linkGet(track.id);
+    if (cached) return { voiceURL: cached.fileUrl, fileSize: cached.fileSize, fromCache: true };
+
+    const { thread, group } = c.message;
+    const stream = await resolveStream(track, signal).catch((e) => {
+      throw new Error(`lỗi lấy stream nhạc: ${e.message}`);
+    });
+
+    const mediaDir = c.store.path('media');
+    await fs.mkdir(mediaDir, { recursive: true, mode: 0o700 });
+    const tmpName = `scl_${track.id}_${Date.now()}.mp3`;
+    const tmpPath = path.join(mediaDir, tmpName);
+
+    try {
+      await downloadToFile(stream, tmpPath, MAX_AUDIO, signal).catch((e) => {
+        throw new Error(`lỗi tải nhạc: ${e.message}`);
+      });
+      const { voiceURL, fileSize } = await c.client.uploadAudio(signal, thread, tmpName, group, MAX_AUDIO);
+      await linkSet(track.id, { title: track.title, artist: track.user?.username, fileUrl: voiceURL, fileSize, at: Date.now() });
+      return { voiceURL, fileSize };
+    } finally {
+      await fs.rm(tmpPath, { force: true });
+    }
+  });
+}
+
+async function playTrack(signal, c, track) {
+  const { thread, group } = c.message;
+
+  const cardP = renderCard(track).catch((e) => (console.error('[SCL]', e.message), ''));
+  const audioP = getAudio(signal, c, track);
+  audioP.catch(() => {}); // tránh unhandled rejection khi await muộn
+
+  let audio = await audioP;
+  const card = await Promise.race([cardP, sleep(8000).then(() => '')]);
+
+  if (card) {
+    await c.client.sendMedia(signal, thread, card, group, true, 10 << 20).catch((e) => console.error('[SCL] sendMedia:', e.message));
+  }
+
+  try {
+    return await c.client.sendVoice(signal, thread, group, audio.voiceURL, audio.fileSize);
+  } catch (err) {
+    if (!audio.fromCache) throw err;
+    // link cache hết hạn → xoá, tải & upload lại 1 lần
+    await linkDel(track.id);
+    audio = await getAudio(signal, c, track);
+    return c.client.sendVoice(signal, thread, group, audio.voiceURL, audio.fileSize);
+  }
+}
+
+function startPlay(c, track) {
+  playTrack(AbortSignal.timeout(120_000), c, track).catch(async (err) => {
+    console.error('[SCL] Play error:', err);
+    const text = style.format(c.settings.get(), 'Lỗi phát nhạc', [{ text: `Không thể gửi bài hát này: ${err.message}` }], true);
+    await c.client.sendText(AbortSignal.timeout(15_000), c.message.thread, c.message.group, text).catch(() => {});
+  });
+}
+
+// ================= SELECTIONS =================
+const selections = new Map();
+const selKeys = (thread, sender) => [`${thread}:${sender}`, thread];
+
+function setSelection(thread, sender, query, tracks) {
+  const sel = { query, tracks, createdAt: Date.now() };
+  for (const k of selKeys(thread, sender)) selections.set(k, sel);
+}
+function getSelection(thread, sender) {
+  for (const k of selKeys(thread, sender)) {
+    const s = selections.get(k);
+    if (s && Date.now() - s.createdAt < SELECTION_TTL) return s;
+  }
+  return null;
+}
+function clearSelection(thread, sender) {
+  for (const k of selKeys(thread, sender)) selections.delete(k);
+}
+// dọn rác định kỳ
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, s] of selections) if (now - s.createdAt > SELECTION_TTL) selections.delete(k);
+  for (const [k, s] of searchCache) if (now - s.at > SEARCH_TTL) searchCache.delete(k);
+}, 60_000).unref();
+
+// ================= COMMAND: !scl =================
+async function pick(c, sel, num, ctx) {
+  const { thread, sender } = c.message;
+  const track = sel.tracks[num - 1];
+  clearSelection(thread, sender);
+  await c.client.react(ctx, c.message, true).catch(() => {});
+  console.log(`[SCL] #${num} '${track.title}' thread=${thread} sender=${sender}`);
+  startPlay(c, track);
+}
+
+export async function sclCmd(c) {
+  const args = c.args;
+  const { thread, sender } = c.message;
+
+  if (!args.length) {
+    return say(
+      'SoundCloud Music',
+      `🎧 Lệnh nghe nhạc SoundCloud siêu tốc:\n` +
+        `• ${PREFIX}${COMMAND} <tên bài hát>: tìm 10 bài hát\n` +
+        `• Gõ 1..10 hoặc reply số để phát bài kèm card & voice\n` +
+        `• ${PREFIX}${COMMAND} <tên bài> &&<số>: tìm và phát ngay\n\n` +
+        `Ví dụ: ${PREFIX}${COMMAND} Nơi này có anh`,
+    );
+  }
+
+  // !scl <số>
+  if (args.length === 1 && /^\d+$/.test(args[0]) && Number(args[0]) <= 10) {
+    const num = Number(args[0]);
+    const sel = getSelection(thread, sender);
+    if (!sel) throw new UserError(`Không có danh sách nào đang chờ. Gõ ${PREFIX}${COMMAND} <tên bài> để tìm mới.`);
+    if (num === 0) {
+      clearSelection(thread, sender);
+      await c.client.react(c.context, c.message, true).catch(() => {});
+      return say('SoundCloud', '❌ Đã hủy chọn bài hát.');
+    }
+    if (num > sel.tracks.length) throw new UserError(`Vui lòng chọn số từ 1 đến ${sel.tracks.length} (hoặc 0 để hủy).`);
+    await pick(c, sel, num, c.context);
+    return null;
+  }
+
+  // !scl <tên> &&<số>
+  let query = args.join(' ');
+  let direct = 0;
+  const parts = query.split('&&');
+  if (parts.length === 2) {
+    query = parts[0].trim();
+    const n = parseInt(parts[1], 10);
+    if (n >= 1 && n <= 10) direct = n;
+  }
+
+  const tracks = await searchTracks(query, 10, c.context).catch((e) => {
+    throw new Error(`lỗi tìm kiếm bài hát: ${e.message}`);
+  });
+  if (!tracks.length) throw new UserError(`Không tìm thấy bài hát nào với từ khóa: ${query}`);
+
+  if (direct && direct <= tracks.length) {
+    await pick(c, { tracks }, direct, c.context);
+    return null;
+  }
+
+  setSelection(thread, sender, query, tracks);
+  (async () => { for (const t of tracks) await renderCard(t).catch(() => {}); })(); // prewarm card
+
+  const lines = [`Tìm thấy ${tracks.length} bài hát cho: "${query}"\n`];
+  tracks.forEach((t, i) => lines.push(`${i + 1}. ${t.title}\n   👤 ${t.user?.username || 'SoundCloud'} • ⏱ ${fmtDur(t.duration)}`));
+  lines.push(`\n👉 Gõ từ 1 đến ${tracks.length} để nghe • Gõ 0 hoặc hủy để dừng (tự hết hạn sau 3 phút)`);
+  return say('🎧 KẾT QUẢ SOUNDCLOUD', lines.join('\n'));
+}
+
+// ================= REPLY HANDLER (gõ số không cần prefix) =================
+function parseNum(text) {
+  let s = text.trim().replace(/\.$/, '');
+  const l = s.toLowerCase();
+  if (['0', 'huy', 'hủy', 'cancel'].includes(l)) return 0;
+  s = s.replace(/^(bài|bai|số|so)\s+/i, '');
+  return /^\d+$/.test(s) ? Number(s) : null;
+}
+
+export async function tryHandleMusicReply(ctx, c, text) {
+  const num = parseNum(text);
+  if (num == null || num > 10) return false;
+  const { thread, sender } = c.message;
+  const sel = getSelection(thread, sender);
+  if (!sel) return false;
+
+  if (num === 0) {
+    clearSelection(thread, sender);
+    await c.client.react(ctx, c.message, true).catch(() => {});
+    const t = style.format(c.settings.get(), 'SoundCloud', [{ text: '❌ Đã hủy chọn bài hát.' }], false);
+    await c.client.reply(ctx, c.message, t).catch(() => {});
+    return true;
+  }
+  if (num > sel.tracks.length) return false;
+  await pick(c, sel, num, ctx);
+  return true;
+}
+
+// Đăng ký: commands['scl'] = sclCmd  (gọi bằng "!scl")
+export const commands = { [COMMAND]: sclCmd };

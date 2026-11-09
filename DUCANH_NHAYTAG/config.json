@@ -1,0 +1,8 @@
+{
+    "prefix": "!",
+    "delay": 1.5,
+    "thread_id": "",
+    "allowed_uids": [],
+    "target_uids": [],
+    "log_level": "INFO"
+}

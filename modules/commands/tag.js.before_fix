@@ -1,0 +1,172 @@
+const fs = require("fs");
+const path = require("path");
+
+const running =
+    global.DUCANH_TAG_JOBS ||
+    (global.DUCANH_TAG_JOBS = new Map());
+
+module.exports = {
+    name: "tag",
+    description: "DUCANH - Tag người được chọn",
+    role: "admin",
+
+    execute: async (api, message, args, config) => {
+        const threadId = message.threadId;
+        const type = message.type;
+        const sender = String(message.data.uidFrom || "");
+        const admins = (config.admin_uids || []).map(String);
+
+        if (!admins.includes(sender)) {
+            return api.sendMessage(
+                "❌ Bạn không có quyền.",
+                threadId,
+                type
+            );
+        }
+
+        const action = (args[0] || "").toLowerCase();
+        const key = String(threadId);
+
+        if (action === "stop" || action === "off") {
+            const job = running.get(key);
+
+            if (job) {
+                job.stop = true;
+                return api.sendMessage(
+                    "⏹ Đã nhận lệnh dừng.",
+                    threadId,
+                    type
+                );
+            }
+
+            return api.sendMessage(
+                "ℹ️ Không có tác vụ đang chạy.",
+                threadId,
+                type
+            );
+        }
+
+        if (action !== "on") {
+            return api.sendMessage(
+                "📌 Cách dùng: !tag on @người\n!tag stop để dừng",
+                threadId,
+                type
+            );
+        }
+
+        if (type !== 1 && String(type).toLowerCase() !== "group") {
+            // Kiểm tra kiểu nhóm chính xác được thực hiện qua dữ liệu mention bên dưới.
+        }
+
+        const mentions = message.data.mentions || [];
+
+        if (!mentions.length) {
+            return api.sendMessage(
+                "⚠️ Hãy chọn người bằng mention thật của Zalo: !tag on @người",
+                threadId,
+                type
+            );
+        }
+
+        if (running.has(key)) {
+            return api.sendMessage(
+                "⚠️ Tác vụ đang chạy. Dùng !tag stop trước.",
+                threadId,
+                type
+            );
+        }
+
+        const file = path.join(__dirname, "..", "ngonwar.txt");
+
+        if (!fs.existsSync(file)) {
+            return api.sendMessage(
+                "❌ Không tìm thấy ngonwar.txt.",
+                threadId,
+                type
+            );
+        }
+
+        let lines;
+
+        try {
+            lines = fs.readFileSync(file, "utf8")
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(Boolean)
+                .slice(0, 2);
+        } catch (err) {
+            console.error("Đọc ngonwar.txt lỗi:", err);
+            return api.sendMessage(
+                "❌ Không đọc được ngonwar.txt.",
+                threadId,
+                type
+            );
+        }
+
+        if (!lines.length) {
+            return api.sendMessage(
+                "⚠️ ngonwar.txt đang trống.",
+                threadId,
+                type
+            );
+        }
+
+        const target = mentions[0];
+
+        if (!target.uid || !Number.isInteger(target.pos) ||
+            !Number.isInteger(target.len) || target.len <= 0) {
+            return api.sendMessage(
+                "❌ Dữ liệu mention không hợp lệ.",
+                threadId,
+                type
+            );
+        }
+
+        const job = { stop: false };
+        running.set(key, job);
+
+        let sent = 0;
+
+        try {
+            for (const line of lines) {
+                if (job.stop) break;
+
+                const prefix = `@${target.name || "Ducanh"}`;
+                const msg = `${prefix}\n${line}`;
+
+                await api.sendMessage({
+                    msg,
+                    mentions: [{
+                        uid: String(target.uid),
+                        pos: 0,
+                        len: prefix.length,
+                        type: 0
+                    }]
+                }, threadId, type);
+
+                sent++;
+
+                if (sent < lines.length && !job.stop) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                }
+            }
+        } catch (err) {
+            console.error("DUCANH tag:", err);
+            await api.sendMessage(
+                "❌ Gửi mention thất bại. Kiểm tra log Termux.",
+                threadId,
+                type
+            );
+        } finally {
+            running.delete(key);
+        }
+
+        if (job.stop) {
+            await api.sendMessage(
+                `⏹ Đã dừng, gửi được ${sent}/${lines.length} dòng.`,
+                threadId,
+                type
+            );
+        }
+    }
+};

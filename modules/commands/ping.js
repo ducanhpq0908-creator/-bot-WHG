@@ -1,0 +1,1 @@
+module.exports = { name: "ping", description: "Kiểm tra độ trễ của Bot", role: "user", execute: async (api, message, args, config) => { const start = Date.now(); const sent = await api.sendMessage("🏓 Pong!", message.threadId, message.type); const latency = Date.now() - start; api.sendMessage(`⏱️ Độ trễ: ${latency}ms`, message.threadId, message.type); } };

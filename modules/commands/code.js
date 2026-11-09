@@ -1,0 +1,12 @@
+module.exports = {
+    name: "eval",
+    execute: async (api, message, args, config) => {
+        if (!config.admin_uids.includes(message.data.uidFrom)) return;
+        try {
+            const result = eval(args.join(" "));
+            api.sendMessage(`💻 Kết quả: ${result}`, message.threadId, message.type);
+        } catch (e) {
+            api.sendMessage(`❌ Lỗi: ${e.message}`, message.threadId, message.type);
+        }
+    }
+};

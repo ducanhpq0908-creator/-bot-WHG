@@ -1,0 +1,65 @@
+const { execSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+
+module.exports = {
+    name: "menu",
+    execute: async (api, message, args, config) => {
+        const commandsDir = __dirname;
+        const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.js'));
+
+        let cmdList = [];
+        for (const file of files) {
+            if (file === 'menu.js') continue;
+            try {
+                const cmd = require(path.join(commandsDir, file));
+                if (!cmd.name || typeof cmd.name !== 'string') continue;
+                const name = cmd.name.toLowerCase();
+                const desc = cmd.description || "Không có mô tả";
+                const isAdmin = cmd.role === "admin" || ["tag", "treo", "stop", "doiten", "troll", "welcome", "bye", "member", "admin", "adminext", "rs", "bot", "eval", "pin", "say", "spam", "vote", "warn", "utils"].includes(name);
+                cmdList.push({ cmd: `${config.prefix}${name}`, desc: desc, admin: isAdmin });
+            } catch (e) {}
+        }
+        cmdList.sort((a, b) => a.admin - b.admin);
+
+        const inputJson = JSON.stringify(cmdList);
+        const output = execSync("python3 create_menu.py", { input: inputJson }).toString().trim();
+        const allImgPaths = JSON.parse(output);
+
+        if (allImgPaths.length === 0) return;
+
+        let pageToShow = 1;
+        if (args.length > 0) {
+            const requestedPage = parseInt(args[0]);
+            if (!isNaN(requestedPage)) {
+                pageToShow = Math.min(Math.max(requestedPage, 1), allImgPaths.length);
+            }
+        }
+
+        const selectedImg = allImgPaths[pageToShow - 1];
+        const imgPath = path.join(__dirname, "..", selectedImg);
+
+        if (fs.existsSync(imgPath)) {
+            const imgBuffer = fs.readFileSync(imgPath);
+            const msgObj = {
+                msg: `📌 **MENU BOT (Trang ${pageToShow}/${allImgPaths.length})**`,
+                attachments: [{
+                    data: imgBuffer,
+                    filename: selectedImg,
+                    metadata: { totalSize: imgBuffer.length, width: 900, height: 500 }
+                }]
+            };
+            
+            await api.sendMessage(msgObj, message.threadId, message.type);
+            
+            // Log thủ công tin nhắn Bot gửi
+            const time = new Date().toLocaleTimeString('vi-VN');
+            console.log(`\x1b[32m[${time}] [BOT GỬI] Nhóm: ${message.threadId} | Nội dung: MENU (Trang ${pageToShow}) \x1b[0m`);
+        }
+
+        allImgPaths.forEach(img => {
+            const p = path.join(__dirname, "..", img);
+            if (fs.existsSync(p)) fs.unlinkSync(p);
+        });
+    }
+};

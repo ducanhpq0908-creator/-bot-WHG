@@ -1,0 +1,58 @@
+# Script Python 3: Xóa sạch cơ chế QR, chỉ dùng cookie từ zalo_auth.json
+# Chú thích kỹ thuật: Loại bỏ hàm loginWithQR, sửa startBot chỉ login bằng cookie, nếu fail thì báo lỗi
+
+import re
+import shutil
+
+MAIN_PATH = "main.js"
+BACKUP_PATH = "main.js.bak"
+
+shutil.copy2(MAIN_PATH, BACKUP_PATH)
+print(f"[OK] Đã sao lưu file cũ ra: {BACKUP_PATH}")
+
+with open(MAIN_PATH, "r", encoding="utf-8") as f:
+    content = f.read()
+
+# 1. Xóa toàn bộ hàm loginWithQR
+pattern_qr = re.compile(r"async function loginWithQR\(\) \{.*?\n\}\n", re.DOTALL)
+content, n1 = pattern_qr.subn("", content, count=1)
+print(f"[1] Đã xóa hàm loginWithQR: {n1} lần")
+
+# 2. Xóa toàn bộ hàm setPrimaryAdmin (nếu muốn giữ thì bỏ qua bước này)
+pattern_admin = re.compile(r"function setPrimaryAdmin\(uid\) \{.*?\n\}\n", re.DOTALL)
+content, n2 = pattern_admin.subn("", content, count=1)
+print(f"[2] Đã xóa hàm setPrimaryAdmin: {n2} lần")
+
+# 3. Sửa logic trong startBot: Bỏ đoạn gọi QR
+old_logic = """        // BƯỚC 2: nếu chưa có phiên hợp lệ -> QR
+        if (!api) {
+            const qrResult = await loginWithQR();
+            api = qrResult.api;
+            botUid = qrResult.botUid;
+            log.info("[QR] Đăng nhập QR thành công. UID: " + botUid);
+        }
+
+        // BƯỚC 3: gán UID vừa đăng nhập làm admin chính
+        setPrimaryAdmin(botUid);
+"""
+
+new_logic = """        // BƯỚC 2: nếu không có phiên hợp lệ -> Báo lỗi
+        if (!api) {
+            log.error("[AUTH] Không có phiên đăng nhập hợp lệ trong zalo_auth.json!");
+            log.error("[AUTH] Hãy tạo lại file zalo_auth.json chứa cookie và imei.");
+            process.exit(1);
+        }
+"""
+
+if old_logic in content:
+    content = content.replace(old_logic, new_logic)
+    print("[3] Đã sửa logic startBot: Không gọi QR, chỉ dùng cookie.")
+else:
+    print("[WARN] Không tìm thấy đoạn logic QR trong startBot để thay thế. Có thể bạn đã sửa trước đó.")
+
+# 4. Ghi đè file
+with open(MAIN_PATH, "w", encoding="utf-8") as f:
+    f.write(content)
+
+print("[DONE] Đã xóa sạch cơ chế QR. Bot sẽ chỉ dùng file zalo_auth.json.")
+print("[TIP] Chạy lại: node main.js")

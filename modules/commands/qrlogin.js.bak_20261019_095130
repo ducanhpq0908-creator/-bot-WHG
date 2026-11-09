@@ -1,0 +1,116 @@
+const { Zalo } = require("zca-js");
+const fs = require("fs");
+const path = require("path");
+
+module.exports = {
+    name: "qrlogin",
+    description: "Đăng nhập Zalo bằng mã QR (Admin)",
+    role: "admin",
+    execute: async (api, message, args, config) => {
+        if (!config.admin_uids.includes(message.data.uidFrom)) {
+            return api.sendMessage("❌ Bạn không có quyền sử dụng lệnh này.", message.threadId, message.type);
+        }
+
+        await api.sendMessage("⏳ Đang khởi tạo mã QR đăng nhập...", message.threadId, message.type);
+
+        const zalo = new Zalo();
+        
+        try {
+            const apiQR = await zalo.loginQR({}, async (qrData) => {
+                let imgBuffer = null;
+                try {
+                    if (qrData && qrData.data && qrData.data.image) {
+                        imgBuffer = Buffer.from(qrData.data.image, 'base64');
+                    } else if (typeof qrData === 'string' && qrData.length > 100) {
+                        imgBuffer = Buffer.from(qrData, 'base64');
+                    }
+                } catch (e) {}
+
+                if (imgBuffer) {
+                    try {
+                        await api.sendMessage({
+                            msg: "📌 **MÃ QR ĐĂNG NHẬP ZALO**\nVui lòng mở Zalo trên điện thoại và quét mã này.",
+                            attachments: [{
+                                data: imgBuffer,
+                                filename: "qr_code.png",
+                                metadata: { totalSize: imgBuffer.length, width: 300, height: 300 }
+                            }]
+                        }, message.threadId, message.type);
+                    } catch (err) {}
+                }
+            });
+
+            const checkInterval = setInterval(async () => {
+                try {
+                    const botUid = apiQR.getOwnId();
+                    if (botUid && botUid !== "0" && botUid !== "undefined") {
+                        clearInterval(checkInterval); 
+
+                        const imei = apiQR.getContext().imei;
+                        
+                        let cookieObj = {};
+                        if (typeof apiQR.getCookie === 'function') {
+                            cookieObj = apiQR.getCookie();
+                        } else if (apiQR.getContext().cookie) {
+                            const raw = apiQR.getContext().cookie;
+                            if (Array.isArray(raw)) {
+                                raw.forEach(c => { if (c.key && c.value) cookieObj[c.key] = c.value; });
+                            } else if (typeof raw === 'string') {
+                                raw.split(';').forEach(part => {
+                                    const [k, v] = part.split('=');
+                                    if (k && v) cookieObj[k.trim()] = v.trim();
+                                });
+                            }
+                        }
+
+                        if (Object.keys(cookieObj).length === 0 && apiQR.getContext().session) {
+                            cookieObj = apiQR.getContext().session.cookies || {};
+                        }
+
+                        const data = { UID: botUid, IMEI: imei, COOKIES: cookieObj };
+                        fs.writeFileSync(path.join(__dirname, "..", "qr_login_info.json"), JSON.stringify(data, null, 4));
+
+                        let cookieStr = "";
+                        for (const [k, v] of Object.entries(cookieObj)) {
+                            cookieStr += `"${k}": "${v}",\n`;
+                        }
+                        cookieStr = cookieStr.slice(0, -2);
+
+                        const msgText = `✅ **ĐĂNG NHẬP THÀNH CÔNG**\n━━━━━━━━━━━━━━━━━━━━\n🆔 UID: ${botUid}\n🔑 IMEI: ${imei}\n🍪 **COOKIES:**\n{\n${cookieStr}\n}\n━━━━━━━━━━━━━━━━━━━━\n⚠️ Tin nhắn này sẽ tự hủy sau 2 phút.`;
+
+                        try {
+                            const sentMsg = await api.sendMessage({ msg: msgText, quote: message.data }, message.threadId, message.type);
+                            
+                            if (sentMsg) {
+                                setTimeout(async () => {
+                                    try {
+                                        // Sửa nội dung tin nhắn thành dấu chấm
+                                        if (api.editMessage) {
+                                            await api.editMessage(".", sentMsg.messageId || sentMsg.msgId, message.threadId, message.type);
+                                        } else if (api.undo) {
+                                            await api.undo({
+                                                msgId: sentMsg.messageId || sentMsg.msgId,
+                                                cliMsgId: sentMsg.cliMsgId,
+                                                uidFrom: api.getOwnId(),
+                                                idTo: message.threadId,
+                                                msgType: message.type
+                                            });
+                                        }
+                                    } catch (err) {
+                                        console.log("Lỗi xóa/sửa tin nhắn:", err.message);
+                                    }
+                                }, 120000); // 2 phút
+                            }
+                        } catch (e) {
+                            console.log("Lỗi gửi tin nhắn Zalo:", e.message);
+                        }
+                    }
+                } catch (e) {}
+            }, 1000);
+
+        } catch (e) {
+            console.error("Lỗi QR Login:", e);
+            api.sendMessage(`❌ Lỗi tạo QR Login: ${e.message}`, message.threadId, message.type);
+        }
+    }
+};

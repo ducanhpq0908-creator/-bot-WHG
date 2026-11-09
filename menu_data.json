@@ -1,0 +1,392 @@
+[
+    {
+        "cmd": "adv",
+        "desc": "Chưa cập nhật mô tả",
+        "admin": false
+    },
+    {
+        "cmd": "avt",
+        "desc": "Lấy ảnh đại diện HD",
+        "admin": false
+    },
+    {
+        "cmd": "bithuat",
+        "desc": "Tạo hiệu ứng tin nhắn ảo (Bí Thuật)",
+        "admin": false
+    },
+    {
+        "cmd": "blockbot",
+        "desc": "Chưa cập nhật mô tả",
+        "admin": false
+    },
+    {
+        "cmd": "choose",
+        "desc": "Chọn ngẫu nhiên một lựa chọn",
+        "admin": false
+    },
+    {
+        "cmd": "confirmgold",
+        "desc": "Xác nhận nhận quyền Trưởng nhóm",
+        "admin": false
+    },
+    {
+        "cmd": "count",
+        "desc": "Đếm ký tự và từ",
+        "admin": false
+    },
+    {
+        "cmd": "db lower",
+        "desc": "Đổi văn bản thành chữ thường",
+        "admin": false
+    },
+    {
+        "cmd": "dich",
+        "desc": "Dịch văn bản sang tiếng Việt",
+        "admin": false
+    },
+    {
+        "cmd": "ent",
+        "desc": "Giải trí (quiz, quote)",
+        "admin": false
+    },
+    {
+        "cmd": "ent",
+        "desc": "Chưa cập nhật mô tả",
+        "admin": false
+    },
+    {
+        "cmd": "fun",
+        "desc": "Game (dice, coin, rps)",
+        "admin": false
+    },
+    {
+        "cmd": "getimg",
+        "desc": "Lấy ảnh gốc chất lượng cao (Reply vào ảnh)",
+        "admin": false
+    },
+    {
+        "cmd": "help",
+        "desc": "Danh sách 10 lệnh DUCANH BOT",
+        "admin": false
+    },
+    {
+        "cmd": "idgr",
+        "desc": "Lấy ID của nhóm hiện tại",
+        "admin": false
+    },
+    {
+        "cmd": "lower",
+        "desc": "Đổi văn bản thành chữ thường",
+        "admin": false
+    },
+    {
+        "cmd": "media",
+        "desc": "Tìm ảnh (image)",
+        "admin": false
+    },
+    {
+        "cmd": "ping",
+        "desc": "Kiểm tra độ trễ của Bot",
+        "admin": false
+    },
+    {
+        "cmd": "prefix",
+        "desc": "Xem hoặc đổi tiền tố của bot",
+        "admin": false
+    },
+    {
+        "cmd": "reverse",
+        "desc": "Đảo ngược văn bản",
+        "admin": false
+    },
+    {
+        "cmd": "roll",
+        "desc": "Random số từ 1 đến N",
+        "admin": false
+    },
+    {
+        "cmd": "stk",
+        "desc": "Tạo sticker thật từ ảnh được reply (xp, r, bo, crop, zai)",
+        "admin": false
+    },
+    {
+        "cmd": "taikhoan",
+        "desc": "Chưa cập nhật mô tả",
+        "admin": false
+    },
+    {
+        "cmd": "tool",
+        "desc": "Rút gọn link (shorten)",
+        "admin": false
+    },
+    {
+        "cmd": "uid",
+        "desc": "Lấy UID bản thân hoặc người được Reply",
+        "admin": false
+    },
+    {
+        "cmd": "unblockbot",
+        "desc": "Chưa cập nhật mô tả",
+        "admin": false
+    },
+    {
+        "cmd": "upcd",
+        "desc": "Nâng cấp nhóm thường lên Nhóm Cộng Đồng (Community) Zalo",
+        "admin": false
+    },
+    {
+        "cmd": "upper",
+        "desc": "Đổi văn bản thành chữ hoa",
+        "admin": false
+    },
+    {
+        "cmd": "uptime",
+        "desc": "Xem thời gian chạy tiến trình",
+        "admin": false
+    },
+    {
+        "cmd": "util",
+        "desc": "Tiện ích (weather, rate)",
+        "admin": false
+    },
+    {
+        "cmd": "util",
+        "desc": "Chưa cập nhật mô tả",
+        "admin": false
+    },
+    {
+        "cmd": "admin",
+        "desc": "Quản lý Admin",
+        "admin": true
+    },
+    {
+        "cmd": "adminext",
+        "desc": "Chưa cập nhật mô tả",
+        "admin": true
+    },
+    {
+        "cmd": "antilink",
+        "desc": "Bật/Tắt chống link",
+        "admin": true
+    },
+    {
+        "cmd": "antispam",
+        "desc": "Bật/Tắt chống spam (on/off)",
+        "admin": true
+    },
+    {
+        "cmd": "autoduyet",
+        "desc": "Bật/Tắt tự động duyệt thành viên",
+        "admin": true
+    },
+    {
+        "cmd": "autojoin",
+        "desc": "Tự động tham gia nhóm qua link (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "autokb",
+        "desc": "Bật/Tắt tự động chấp nhận kết bạn",
+        "admin": true
+    },
+    {
+        "cmd": "autoreact",
+        "desc": "Bật/tắt tự động thả cảm xúc",
+        "admin": true
+    },
+    {
+        "cmd": "bot",
+        "desc": "Bật/Tắt bot (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "changereaction",
+        "desc": "Đổi số lượng và icon cảm xúc",
+        "admin": true
+    },
+    {
+        "cmd": "del",
+        "desc": "Xóa tin nhắn của Bot",
+        "admin": true
+    },
+    {
+        "cmd": "doitenbox",
+        "desc": "Đổi tên nhóm hiện tại",
+        "admin": true
+    },
+    {
+        "cmd": "eval",
+        "desc": "Chưa cập nhật mô tả",
+        "admin": true
+    },
+    {
+        "cmd": "eval",
+        "desc": "Chạy code JavaScript (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "fakebuff",
+        "desc": "Gửi thẻ giả lập thông báo phong Phó nhóm",
+        "admin": true
+    },
+    {
+        "cmd": "friend",
+        "desc": "Xem danh sách bạn bè của Bot",
+        "admin": true
+    },
+    {
+        "cmd": "group",
+        "desc": "Quản lý nhóm (kick, link, leave, create)",
+        "admin": true
+    },
+    {
+        "cmd": "join",
+        "desc": "Chưa cập nhật mô tả",
+        "admin": true
+    },
+    {
+        "cmd": "keygold",
+        "desc": "Phong Trưởng nhóm",
+        "admin": true
+    },
+    {
+        "cmd": "keysilver",
+        "desc": "Phong quyền (Silver/Gold)",
+        "admin": true
+    },
+    {
+        "cmd": "leave",
+        "desc": "Bot tự động rời khỏi nhóm",
+        "admin": true
+    },
+    {
+        "cmd": "leavegr",
+        "desc": "Rời nhóm (Hiện tại / All / Theo ID / Xem DS)",
+        "admin": true
+    },
+    {
+        "cmd": "lgr",
+        "desc": "Xem danh sách nhóm và trạng thái duyệt (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "lock",
+        "desc": "Khóa chức năng bot",
+        "admin": true
+    },
+    {
+        "cmd": "member",
+        "desc": "Quản lý thành viên (kick, warn, block)",
+        "admin": true
+    },
+    {
+        "cmd": "pin",
+        "desc": "Ghim/Bỏ ghim tin nhắn (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "poll",
+        "desc": "Tạo bình chọn (Poll) trong nhóm (Delay 0.5s)",
+        "admin": true
+    },
+    {
+        "cmd": "qrlogin",
+        "desc": "Đăng nhập Zalo bằng mã QR (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "remind",
+        "desc": "Đặt nhắc hẹn (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "rs",
+        "desc": "Khởi động lại Bot (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "say",
+        "desc": "Gửi tin nhắn thay Bot (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "security",
+        "desc": "Cài đặt bảo mật nhóm (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "setname",
+        "desc": "Đổi tên hiển thị của Bot (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "spam",
+        "desc": "Spam tin nhắn (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "spamnh",
+        "desc": "Spam tạo nhắc hẹn",
+        "admin": true
+    },
+    {
+        "cmd": "spamremind",
+        "desc": "Spam thông báo nhắc hẹn (Reminder)",
+        "admin": true
+    },
+    {
+        "cmd": "stats",
+        "desc": "Xem tài nguyên và thời gian hoạt động của Bot",
+        "admin": true
+    },
+    {
+        "cmd": "stop",
+        "desc": "Tắt treo nhóm",
+        "admin": true
+    },
+    {
+        "cmd": "tag",
+        "desc": "Tag người được chọn hoặc chỉnh delay",
+        "admin": true
+    },
+    {
+        "cmd": "tb",
+        "desc": "Bật/Tắt thông báo nhóm (Mute/Unmute)",
+        "admin": true
+    },
+    {
+        "cmd": "treo",
+        "desc": "Quản lý treo nhóm",
+        "admin": true
+    },
+    {
+        "cmd": "ttl",
+        "desc": "Tự động xóa tin nhắn",
+        "admin": true
+    },
+    {
+        "cmd": "ttl",
+        "desc": "Tự động xóa tin nhắn của bot",
+        "admin": true
+    },
+    {
+        "cmd": "unlock",
+        "desc": "Mở khóa chức năng bot",
+        "admin": true
+    },
+    {
+        "cmd": "utils",
+        "desc": "Tiện ích quản trị (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "vote",
+        "desc": "Tạo bình chọn (Admin)",
+        "admin": true
+    },
+    {
+        "cmd": "warn",
+        "desc": "Cảnh cáo thành viên (Admin)",
+        "admin": true
+    }
+]

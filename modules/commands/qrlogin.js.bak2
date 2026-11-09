@@ -1,0 +1,93 @@
+const { Zalo } = require("zca-js");
+
+module.exports = {
+    name: "qrlogin",
+    description: "Đăng nhập Zalo bằng mã QR (Dành cho mọi người)",
+    execute: async (api, message, args, config) => {
+        await api.sendMessage("⏳ Đang khởi tạo mã QR đăng nhập...", message.threadId, message.type);
+
+        const zalo = new Zalo();
+        
+        try {
+            const windowsUA =
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/131.0.0.0 Safari/537.36";
+
+            const apiQR = await zalo.loginQR({
+                userAgent: windowsUA,
+                language: "vi"
+            }, async (qrData) => {
+                let imgBuffer = null;
+                try {
+                    if (qrData && qrData.data && qrData.data.image) {
+                        imgBuffer = Buffer.from(qrData.data.image, 'base64');
+                    } else if (typeof qrData === 'string' && qrData.length > 100) {
+                        imgBuffer = Buffer.from(qrData, 'base64');
+                    }
+                } catch (e) {}
+
+                if (imgBuffer) {
+                    try {
+                        await api.sendMessage({
+                            msg: "📌 **MÃ QR ĐĂNG NHẬP ZALO**\nVui lòng mở Zalo trên điện thoại và quét mã này.",
+                            attachments: [{
+                                data: imgBuffer,
+                                filename: "qr_code.png",
+                                metadata: { totalSize: imgBuffer.length, width: 300, height: 300 }
+                            }]
+                        }, message.threadId, message.type);
+                    } catch (err) {}
+                }
+            });
+
+            // Theo dõi trạng thái để báo khi quét
+            let scannedNotified = false;
+            const checkInterval = setInterval(async () => {
+                try {
+                    // Gửi thông báo khi đã quét (chưa cần bấm xác nhận)
+                    if (!scannedNotified) {
+                        const ctx = apiQR.getContext();
+                        if (ctx && ctx.session && ctx.session.cookies && ctx.session.cookies.zpsid) {
+                            scannedNotified = true;
+                            await api.sendMessage("👀 **ĐÃ QUÉT MÃ QR!**\nVui lòng bấm 'Xác nhận' trên điện thoại để hoàn tất đăng nhập.", message.threadId, message.type);
+                        }
+                    }
+
+                    const botUid = apiQR.getOwnId();
+                    if (botUid && botUid !== "0" && botUid !== "undefined") {
+                        clearInterval(checkInterval); 
+
+                        const imei = apiQR.getContext().imei;
+                        const rawCookies = apiQR.getContext().cookie || (apiQR.getContext().session ? apiQR.getContext().session.cookies : {});
+                        
+                        let cookieObj = {};
+                        const requiredKeys = ["_zlang", "zpsid", "__zi", "zpw_sek", "zpdid", "zlogin_session", "app.event.zalo.me"];
+                        
+                        if (Array.isArray(rawCookies)) {
+                            rawCookies.forEach(c => {
+                                if (c.key && requiredKeys.includes(c.key)) cookieObj[c.key] = c.value;
+                            });
+                        } else if (typeof rawCookies === 'object') {
+                            requiredKeys.forEach(k => {
+                                if (rawCookies[k]) cookieObj[k] = rawCookies[k];
+                            });
+                        }
+
+                        const cookieStr = JSON.stringify(cookieObj, null, 4);
+
+                        const msgText = `✅ **ĐĂNG NHẬP THÀNH CÔNG**\n━━━━━━━━━━━━━━━━━━━━\n🆔 UID: ${botUid}\n🔑 IMEI: ${imei}\n🍪 **COOKIES:**\n\`\`\`json\n${cookieStr}\n\`\`\`\n━━━━━━━━━━━━━━━━━━━━\n⚠️ Vui lòng copy thông tin này để sử dụng!`;
+
+                        try {
+                            await api.sendMessage({ msg: msgText, quote: message.data }, message.threadId, message.type);
+                        } catch (e) {}
+                    }
+                } catch (e) {}
+            }, 1000);
+
+        } catch (e) {
+            console.error("Lỗi QR Login:", e);
+            api.sendMessage(`❌ Lỗi tạo QR Login: ${e.message}`, message.threadId, message.type);
+        }
+    }
+};

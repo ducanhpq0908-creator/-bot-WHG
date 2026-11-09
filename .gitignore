@@ -1,0 +1,11 @@
+node_modules/
+.env
+config.js
+zalo_auth.json
+qr_login_info.json
+logs/
+cache/
+*.log
+*.zip
+*.rar
+api-zalo/

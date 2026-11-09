@@ -1,0 +1,144 @@
+
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+
+const sticker = require("../internal/sticker");
+const zalo = require("../internal/zalo");
+
+async function stkCmd(c) {
+    const prefix = c.Settings.Get().Prefix;
+    const opts = sticker.parseOptions(c.Args || []);
+
+    const {
+        mediaURL,
+        cliMsgID,
+        isVideo
+    } = sticker.extractMedia(c.Message);
+
+    if (!mediaURL) {
+        const guide =
+`🎨 Lệnh tạo Sticker Zalo siêu tốc (STK):
+
+• Reply vào ảnh, GIF, video hoặc sticker rồi gõ:
+  • ${prefix}stk: Tạo sticker thường
+  • ${prefix}stk zai: Tạo sticker có icon zAI
+  • ${prefix}stk xp: Xóa phông nền
+  • ${prefix}stk r (hoặc ${prefix}stk xoay): Xoay tròn 360°
+  • ${prefix}stk bo: Bo tròn 4 góc
+  • ${prefix}stk crop: Cắt ảnh thành hình tròn
+  • ${prefix}stk r trai: Xoay ngược chiều kim đồng hồ
+
+💡 Kết hợp:
+  • ${prefix}stk xp r
+  • ${prefix}stk xp zai
+  • ${prefix}stk r zai`;
+
+        return {
+            type: "say",
+            title: "Tạo Sticker Zalo",
+            message: guide
+        };
+    }
+
+    if (!c.Client) {
+        throw new Error("Hệ thống kết nối Zalo chưa sẵn sàng.");
+    }
+
+    const mediaDir = c.Store.Path("media");
+    fs.mkdirSync(mediaDir, { recursive: true });
+
+    const tmpName = `stk_${Date.now()}_${Math.random()
+        .toString(16).slice(2)}.webp`;
+
+    const tmpPath = path.join(mediaDir, tmpName);
+
+    // React khi bắt đầu xử lý
+    try {
+        await c.Client.React(c.Context, c.Message, true);
+    } catch (err) {
+        console.error("[STK] React error:", err);
+    }
+
+    // Xử lý nền, không chặn lệnh
+    (async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(
+            () => controller.abort(),
+            60_000
+        );
+
+        try {
+            const ctx = {
+                signal: controller.signal
+            };
+
+            await sticker.process(
+                ctx,
+                mediaURL,
+                isVideo,
+                opts,
+                tmpPath
+            );
+
+            let cdnURL;
+
+            try {
+                cdnURL = await sticker.uploadTempFile(
+                    ctx,
+                    tmpPath
+                );
+            } catch (err) {
+                console.error(
+                    "[STK] UploadTempFile thất bại, thử Zalo native upload:",
+                    err
+                );
+
+                cdnURL = await c.Client.UploadAttachment(
+                    ctx,
+                    c.Message.Thread,
+                    tmpName,
+                    c.Message.Group,
+                    15 * 1024 * 1024
+                );
+            }
+
+            const finalURL =
+                `${cdnURL}?stickerCreatedBy=quoc.huy`;
+
+            await c.Client.SendCustomSticker(
+                ctx,
+                c.Message.Thread,
+                c.Message.Group,
+                finalURL,
+                finalURL,
+                512,
+                512,
+                cliMsgID,
+                opts.WithZAI
+            );
+
+            console.log(
+                `[STK] Gửi thành công: withZAI=${opts.WithZAI}, ` +
+                `spin=${opts.IsSpin}, xp=${opts.IsXoaPhong}, ` +
+                `thread=${c.Message.Thread}`
+            );
+
+        } catch (err) {
+            console.error("[STK] Xử lý sticker thất bại:", err);
+        } finally {
+            clearTimeout(timeout);
+            try {
+                fs.rmSync(tmpPath, { force: true });
+            } catch (_) {}
+        }
+    })();
+
+    return {
+        Quiet: true
+    };
+}
+
+module.exports = {
+    stkCmd
+};

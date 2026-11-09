@@ -1,0 +1,26 @@
+{
+    "imei": "9d382666-8168-4b92-8447-d7a11c996093-a69b52f9d7f760edf3fd052bcda2542f",
+    "session_cookies": {
+        "_zlang": "vn",
+        "zpsid": "8uRR.464950428.18.2jL3vLHq2Jx8uBybM7G9FY47UmfYG30BP40x1l-KU5cC2rn7LNa5v3vq2Ju",
+        "__zi": "3000.QOBlzDCV2uGerkFzm0LGrMtNvVtB21pGQDQh-ii55jHcsgJv.1",
+        "zpw_sek": "pRrW.464950428.a0.Yd93dvkjwcmOs6y1fKpP6lzkl76cTljFtXwHME8SbM-lUvr0tGQZJUSYZc_pSUGu-USvQ-EKfa_zJTSMNYRP6W",
+        "zpdid": "41B_bbpqeJ0S5vcVNllCDnmQavbTziK-",
+        "zlogin_session": "kW4JGLyjCnIxFnDDLXTbH-Tj24LH5sXDuMuGNmXJPbMgBmLK151ZKAei1bC4K69G8dq",
+        "app.event.zalo.me": "2308582060272878720"
+    },
+    "prefix": "!",
+    "bot_name": "ducanhe",
+    "admin_uids": [
+        "637227881877878191",
+        "6684320263856712790"
+    ],
+    "paths": {
+        "state": "/data/data/com.termux/files/home/WHG/bot_state.json",
+        "ttl": "/data/data/com.termux/files/home/WHG/ttl_config.json",
+        "react": "/data/data/com.termux/files/home/WHG/react_config.json",
+        "accounts": "/data/data/com.termux/files/home/WHG/modules/cache/accounts.json",
+        "gameData": "/data/data/com.termux/files/home/WHG/modules/cache/game_data.json",
+        "advConfig": "/data/data/com.termux/files/home/WHG/modules/cache/adv_config.json"
+    }
+}

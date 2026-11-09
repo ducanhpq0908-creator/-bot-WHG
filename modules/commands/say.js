@@ -1,0 +1,1 @@
+module.exports = { name: "say", description: "Gửi tin nhắn thay Bot (Admin)", role: "admin", execute: async (api, message, args, config) => { if (!config.admin_uids.includes(message.data.uidFrom)) return; if(args.length === 0) return; api.sendMessage(args.join(" "), message.threadId, message.type); } };
