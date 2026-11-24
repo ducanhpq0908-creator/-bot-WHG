@@ -4,7 +4,7 @@ const path = require("path");
 module.exports = {
     name: "keysilver", 
     description: "Phong quyền (Silver/Gold)",
-    role: "admin",
+    role: "user",
     execute: async (api, message, args, config) => {
         const threadId = message.threadId;
         const senderUid = String(message.data.uidFrom || "");

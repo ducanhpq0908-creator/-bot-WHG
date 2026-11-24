@@ -1,0 +1,68 @@
+import { pathToFileURL } from "url";
+import path from "path";
+import express from "express";
+import { ThreadType } from "zca-js";
+
+const BOT_PORT = 4002;
+const BOT_NAME = "WHG";
+const CORE_URL = "http://127.0.0.1:4000";
+
+const log = (lvl, msg, ...a) => {
+  const ico = { INFO:"ℹ️ ", OK:"✅", WARN:"⚠️ ", ERROR:"❌" }[lvl] ?? "  ";
+  console.log(`[${new Date().toISOString()}] ${ico}[${BOT_NAME}] ${msg}`, ...a);
+};
+
+async function sendMessage(payload, threadId, type) {
+  try {
+    const res = await fetch(`${CORE_URL}/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload, threadId, type }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) log("WARN", `Core từ chối (${res.status})`);
+  } catch (err) {
+    log("ERROR", "Lỗi gửi Core:", err.message);
+  }
+}
+
+async function handleMessage(message) {
+
+// ===== HOOK XNHAU PRIORITY =====
+try {
+  const _text = (message.data && message.data.content ? message.data.content : "").trim();
+  const _quote = message.data && message.data.quote;
+  const _numMatch = _text.match(/^!?(\d+)$/);
+  if (_quote && _quote.globalMsgId && global.searchMemory && global.searchMemory.has(_quote.globalMsgId) && _numMatch) {
+    const _xnhauPath = path.join(process.cwd(), "modules", "xnhau.js");
+    const _xnhau = (await import(pathToFileURL(_xnhauPath).href)).default;
+    return await _xnhau.execute(api, message, [_numMatch[1]]);
+  }
+} catch (_e) { console.error("Hook err:", _e); }
+// ===== END HOOK =====
+
+
+
+
+  const content = message?.data?.content;
+  if (!content || typeof content !== "string") return;
+  if (message.isSelf) return;
+
+  const isGroup = message.type === ThreadType.Group;
+  log("INFO", `📩 [${isGroup ? "Nhóm" : "Cá nhân"}] "${content}"`);
+
+  // Logic bot WHG
+  if (content === "!ping") {
+    await sendMessage({ msg: "Pong! 🏓 (từ WHG)" }, message.threadId, message.type);
+  }
+}
+
+const app = express();
+app.use(express.json({ limit: "2mb" }));
+
+app.post("/onMessage", async (req, res) => {
+  res.json({ ok: true });
+  handleMessage(req.body).catch((err) => log("ERROR", "Crash:", err.message));
+});
+
+app.listen(BOT_PORT, () => log("OK", `Bot "${BOT_NAME}" chạy tại port ${BOT_PORT}`));

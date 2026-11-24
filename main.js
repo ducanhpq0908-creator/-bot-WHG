@@ -119,6 +119,30 @@ function findClosestCommand(input, commandsMap) {
 
 // ===== HÀM ĐỌC KÍCH THƯỚC ẢNH =====
 const imageMetadataGetter = async (filePath) => {
+
+// ===== HOOK XNHAU FINAL =====
+try {
+  const _rawText = (message.data && message.data.content) ? String(message.data.content).trim() : "";
+  const _quote = message.data && message.data.quote;
+  const _match = _rawText.match(/^!?(\d+)$/);
+  if (_quote && _quote.globalMsgId && global.searchMemory && global.searchMemory.has(_quote.globalMsgId) && _match) {
+    const _path = require("path");
+    const _url = require("url");
+    const _xnhau = (await import(_url.pathToFileURL(_path.join(process.cwd(), "modules", "xnhau.js")).href)).default;
+    return await _xnhau.execute(api, message, [_match[1]]);
+  }
+} catch (_e) { console.error("Lỗi hook tải:", _e.message); }
+// ===== END HOOK =====
+
+
+
+
+
+
+
+
+
+
     try {
         const buf = fs.readFileSync(filePath);
         let width = 1080, height = 1080, size = buf.length;
@@ -138,6 +162,16 @@ async function startBot() {
 
         const zalo = new Zalo({ selfListen: true, imageMetadataGetter });
         const api = await zalo.login({ cookie: cookieArray, imei: CFG.imei, userAgent: "Mozilla/5.0" });
+
+        /* API_KEEPALIVE_LOOP */
+        setInterval(async () => {
+            try {
+                if (api.keepAlive) await api.keepAlive();
+            } catch (e) {}
+        }, 60000); // 60s gửi 1 lần lên server
+        /* END_API_KEEPALIVE_LOOP */
+            
+
 
      /* TRUE_INSTANT_APPROVE */
      api.listener.on("group_event", async (event) => {
@@ -178,7 +212,10 @@ async function startBot() {
                  if (uids.length > 0) {
                      await api.reviewPendingMemberRequest({ members: uids, isApprove: 1 }, gid).catch(() => {});
                  }
-                 await new Promise(r => setTimeout(r, 100)); // Nghỉ 100ms
+                 
+    
+
+await new Promise(r => setTimeout(r, 100)); // Nghỉ 100ms
              }
          } catch (e) {}
      }, 2000);
@@ -405,6 +442,18 @@ async function startBot() {
                 const threadId = message.threadId || data.threadId || data.idTo;
                 const content = data.content;
 
+            // ── TỰ ĐỘNG THẢ CẢM XÚC KHI BỊ TAG ──
+            try {
+                const doitenModule = require('./modules/commands/changereaction.js');
+                if (doitenModule && typeof doitenModule.handleAutoReact === 'function') {
+                    await doitenModule.handleAutoReact(api, message, botUid);
+                }
+            } catch (e) {
+                // Bỏ qua lỗi nếu có
+            }
+            // ────────────────────────────────────
+
+
                 if (!content) return;
 
                 let text = "";
@@ -540,6 +589,35 @@ async function startBot() {
 
         log.info("[LISTENER] Đã đăng ký sự kiện message; đang khởi động listener.");
         api.listener.start();
+
+        /* AUTO_SPAWN_WEBSOCKET */
+        // Kiểm tra định kỳ 15 giây. Nếu WS bị đóng (readyState = 3) thì khởi tạo lại.
+        setInterval(() => {
+            try {
+                if (api.listener && api.listener._ws) {
+                    const state = api.listener._ws.readyState;
+                    // WebSocket.CLOSED = 3, WebSocket.CLOSING = 2
+                    if (state === 3 || state === 2) {
+                        console.log("[WS-AUTO-SPAWN] Phát hiện WebSocket chết. Đang khởi tạo WebSocket mới...");
+                        // Tắt listener cũ
+                        api.listener.stop();
+                        
+                        // Đợi 3 giây rồi tạo Listener mới
+                        setTimeout(() => {
+                            try {
+                                api.listener.start();
+                                console.log("[WS-AUTO-SPAWN] ✅ Đã tạo lại WebSocket thành công.");
+                            } catch (e) {
+                                console.log("[WS-AUTO-SPAWN] ❌ Lỗi khi tạo lại WebSocket:", e.message);
+                            }
+                        }, 3000);
+                    }
+                }
+            } catch (e) {}
+        }, 15000);
+        /* END_AUTO_SPAWN_WEBSOCKET */
+
+
         
         await new Promise(() => {});
         return true;

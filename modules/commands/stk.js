@@ -5,6 +5,10 @@ const http = require("http");
 const https = require("https");
 const path = require("path");
 const axios = require("axios");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
+const execFileP = promisify(execFile);
+const os = require("os");
 const sharp = require("sharp");
 
 const SIZE = 512;
@@ -116,9 +120,8 @@ function getAttachmentUrl(attach) {
     return typeof url === "string" ? url : "";
 }
 
-function getImageUrl(message) {
+function getImageUrls(message) {
     const data = message.data || {};
-
     const candidates = [
         data.quote && data.quote.attach,
         data.quote && data.quote.content,
@@ -126,12 +129,20 @@ function getImageUrl(message) {
         data.attach
     ];
 
+    const urls = new Set();
     for (const item of candidates) {
-        const url = getAttachmentUrl(item);
-        if (url) return url;
+        const parsed = safeParse(item);
+        if (!parsed) continue;
+        const params = safeParse(parsed.params) || {};
+        // Ưu tiên link gốc rawUrl trước để tránh JPEG XL
+        const list = [params.rawUrl, parsed.href, params.hd, parsed.hd, parsed.thumb];
+        for (const u of list) {
+            if (typeof u === "string" && u.startsWith("http")) {
+                urls.add(u);
+            }
+        }
     }
-
-    return "";
+    return Array.from(urls);
 }
 
 // ===============================
@@ -592,6 +603,45 @@ async function encodeAnimatedWebp(frames) {
 
 // Giải mã + resize ảnh gốc MỘT lần duy nhất (phần tốn nhất với ảnh HD),
 // rồi xử lý các tuỳ chọn trên buffer raw 512x512 và encode WebP/PNG.
+
+
+async function convertJxlToPng(input) {
+    const tmp = path.join(os.tmpdir(), "jxl_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8));
+    const inFile = tmp + ".jxl";
+    const outFile = tmp + ".png";
+    try {
+        fs.writeFileSync(inFile, input);
+        // Dùng script Python (jxl2png.py) để decode JXL
+        const scriptPath = path.join(__dirname, "..", "..", "jxl2png.py");
+        await execFileP("python3", [scriptPath, inFile, outFile], { timeout: 30000 });
+        
+        const buf = fs.readFileSync(outFile);
+        if (!buf.length) throw new Error("Python output rỗng");
+        console.log("[STK] Python JXL->PNG OK:", buf.length, "bytes");
+        return buf;
+    } finally {
+        try { fs.unlinkSync(inFile); } catch {}
+        try { fs.unlinkSync(outFile); } catch {}
+    }
+}
+
+async function convertToPng(input) {
+    const tmp = path.join(os.tmpdir(), "stk_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8));
+    const inFile = tmp + ".bin";
+    const outFile = tmp + ".png";
+    try {
+        fs.writeFileSync(inFile, input);
+        await execFileP("ffmpeg", ["-y", "-i", inFile, "-frames:v", "1", outFile], { timeout: 30000 });
+        const buf = fs.readFileSync(outFile);
+        if (!buf.length) throw new Error("ffmpeg output rỗng");
+        console.log("[STK] ffmpeg convert OK:", buf.length, "bytes");
+        return buf;
+    } finally {
+        try { fs.unlinkSync(inFile); } catch {}
+        try { fs.unlinkSync(outFile); } catch {}
+    }
+}
+
 async function buildSticker(input, opts) {
     const ms = {};
     const notes = [];
@@ -606,7 +656,16 @@ async function buildSticker(input, opts) {
     // bo / crop cần ảnh lấp đầy khung để thấy rõ hiệu ứng
     const cover = opts.bo || opts.crop;
 
-    const resized = await sharp(input, {
+    try { await sharp(input).metadata(); } catch(e) { console.log("[STK DEBUG] sharp metadata lỗi:", e.message); }
+    let sharpInput = input;
+    try {
+        await sharp(input).metadata();
+    } catch (e) {
+        console.log("[STK] sharp không decode được, thử ffmpeg...", e.message);
+        sharpInput = await convertToPng(input);
+    }
+
+    const resized = await sharp(sharpInput, {
         limitInputPixels: 40000000,
         failOn: "error"
     })
@@ -1005,9 +1064,9 @@ module.exports = {
         const send = (msgObj) =>
             api.sendMessage(msgObj, threadId, type);
 
-        const mediaUrl = getImageUrl(message);
+        const mediaUrls = getImageUrls(message);
 
-        if (!mediaUrl) {
+        if (mediaUrls.length === 0) {
             return send({ msg: guideText(getPrefix(config)) });
         }
 
@@ -1041,7 +1100,41 @@ module.exports = {
                 );
             }
 
-            const raw = await downloadImage(mediaUrl);
+            let raw = null;
+            for (let url of mediaUrls) {
+                // Thử biến đổi link JXL thành JPG của Zalo CDN
+                if (url.includes('.jxl') || url.includes('/jx1/')) {
+                    url = url.replace(/\.jxl/gi, '.jpg').replace(/\/jx1\//gi, '/jpg/');
+                }
+                
+                console.log("[STK] Thử tải:", url);
+                try {
+                    const buf = await downloadImage(url);
+                    // Kiểm tra xem có phải JPEG XL không
+                    if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0x0a) {
+                        console.log("[STK] Phát hiện JPEG XL, đang convert bằng djxl...");
+                        raw = await convertJxlToPng(buf);
+                        console.log("[STK] Convert JXL thành công, size:", raw.length);
+                        break;
+                    }
+                    // Kiểm tra HTML/JSON (báo lỗi 404 từ CDN)
+                    const headStr = buf.slice(0, 10).toString("utf8");
+                    if (headStr.includes("<") || headStr.includes("{")) {
+                        console.log("[STK] Trả về HTML/JSON, bỏ qua:", url);
+                        continue;
+                    }
+                    
+                    raw = buf;
+                    break;
+                } catch (e) {
+                    console.log("[STK] Tải lỗi:", e.message);
+                }
+            }
+            
+            if (!raw) {
+                throw new Error("Không tìm thấy ảnh định dạng hỗ trợ (ảnh gốc có thể là JPEG XL).");
+            }
+            console.log("[STK] raw size =", raw.length, "| head hex =", raw.slice(0, 12).toString("hex"));
             lap("tải");
 
             // Giải mã một lần, xử lý tuỳ chọn, encode hai định dạng

@@ -1,19 +1,21 @@
 {
-    "imei": "9d382666-8168-4b92-8447-d7a11c996093-a69b52f9d7f760edf3fd052bcda2542f",
+    "imei": "bbb20d7b-19ab-4352-ab02-4fe0f893ea45-a69b52f9d7f760edf3fd052bcda2542f",
     "session_cookies": {
         "_zlang": "vn",
-        "zpsid": "8uRR.464950428.18.2jL3vLHq2Jx8uBybM7G9FY47UmfYG30BP40x1l-KU5cC2rn7LNa5v3vq2Ju",
-        "__zi": "3000.QOBlzDCV2uGerkFzm0LGrMtNvVtB21pGQDQh-ii55jHcsgJv.1",
-        "zpw_sek": "pRrW.464950428.a0.Yd93dvkjwcmOs6y1fKpP6lzkl76cTljFtXwHME8SbM-lUvr0tGQZJUSYZc_pSUGu-USvQ-EKfa_zJTSMNYRP6W",
-        "zpdid": "41B_bbpqeJ0S5vcVNllCDnmQavbTziK-",
-        "zlogin_session": "kW4JGLyjCnIxFnDDLXTbH-Tj24LH5sXDuMuGNmXJPbMgBmLK151ZKAei1bC4K69G8dq",
-        "app.event.zalo.me": "2308582060272878720"
+        "zpsid": "KHbQ.465120074.27.rZ-foNid9cqn39zsToScRGvKL5bD4XTVInSHMHpUCBcZM7CKUZBURH0d9cq",
+        "__zi": "3000.QOBlzDCV2uGerkFzm0LGr6NGvVZ60npLPTsi-yCF7zLctwxu.1",
+        "zpw_sek": "M7FL.465120074.a0.VFnsEQZt08ahWeNaGAay_ngBMPH3anwK8fXod1cSMh45qrlA0DzFinRjMOyWb07T7Cx5wRLnGweOg2e7OS8y_m",
+        "zpdid": "41F-aL7phJWG49MNKlp7EnKSbPrG-C8n",
+        "zlogin_session": "kW4JGLyjCnIxFnDDLXTbH-Tj249L4cb7xMyHLGHIPr-cBWDS255ZLQOk1KiKKcDPVG",
+        "app.event.zalo.me": "8554988987551900208"
     },
     "prefix": "!",
-    "bot_name": "ducanhe",
+    "bot_name": "ducanh w diep",
     "admin_uids": [
-        "637227881877878191",
-        "6684320263856712790"
+        "638563530995495215",
+        "726663259331377894",
+        "7441720936277410997",
+        "418200296456547646"
     ],
     "paths": {
         "state": "/data/data/com.termux/files/home/WHG/bot_state.json",

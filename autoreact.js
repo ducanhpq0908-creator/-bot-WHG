@@ -1,3 +1,11 @@
+
+function safeStr(v) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "object") {
+    try { return JSON.stringify(v); } catch(e) { return String(v); }
+  }
+  return String(v);
+}
 const fs = require("fs");
 const path = require("path");
 const { Reactions } = require("zca-js");
